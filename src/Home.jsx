@@ -79,7 +79,6 @@ function Home() {
             {(hasPermission('padrao_podeDashboard') || isAdmin()) && (
               <button className="btn btn-outline-light me-2" onClick={() => navigate(`/${restaurantSlug}/dashboard`)}>Dashboard</button>
             )}
-            <button className="btn btn-outline-light me-2" onClick={() => navigate(`/${restaurantSlug}/products`)}>Produtos</button>
             <button className="btn btn-outline-light" onClick={handleLogout}>Sair</button>
           </div>
         </div>

@@ -13,14 +13,9 @@ function Products() {
   const [flavors, setFlavors] = useState([])
   const [categories, setCategories] = useState([])
   const [products, setProducts] = useState([])
-  const [categoryAdditionals, setCategoryAdditionals] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [filterCategory, setFilterCategory] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
+  
   const [showModal, setShowModal] = useState(false)
   const [showAdditionalsModal, setShowAdditionalsModal] = useState(false)
-  const [showEditAdditionalModal, setShowEditAdditionalModal] = useState(false)
-  const [editingAdditional, setEditingAdditional] = useState(null)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [modalType, setModalType] = useState('create')
   const [currentItem, setCurrentItem] = useState(null)
@@ -39,13 +34,11 @@ function Products() {
     fetchData()
     if (activeTab === 'products') {
       fetchAllData()
-      fetchCategoryAdditionals()
     }
   }, [activeTab])
 
   const fetchAllData = async () => {
     const token = localStorage.getItem('token')
-    setLoading(true)
     try {
       const [measuresRes, additionalsRes, variationsRes, flavorsRes, categoriesRes] = await Promise.all([
         fetch(`${API_URL}/product-measures`, { headers: { 'Authorization': `Bearer ${token}` } }),
@@ -54,13 +47,6 @@ function Products() {
         fetch(`${API_URL}/flavors`, { headers: { 'Authorization': `Bearer ${token}` } }),
         fetch(`${API_URL}/categories`, { headers: { 'Authorization': `Bearer ${token}` } })
       ])
-      
-      // Verificar se todas as respostas são OK
-      if (!measuresRes.ok || !additionalsRes.ok || !variationsRes.ok || !flavorsRes.ok || !categoriesRes.ok) {
-        console.error('Erro em uma ou mais requisições')
-        alert('Erro ao carregar dados auxiliares. Verifique se a API está rodando.')
-        return
-      }
       
       const [measuresData, additionalsData, variationsData, flavorsData, categoriesData] = await Promise.all([
         measuresRes.json(),
@@ -77,9 +63,6 @@ function Products() {
       setCategories(categoriesData.data || [])
     } catch (err) {
       console.error('Erro ao buscar dados auxiliares:', err)
-      alert('Erro ao conectar com a API. Verifique se o servidor está rodando.')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -94,7 +77,6 @@ function Products() {
       products: '/products'
     }
     
-    setLoading(true)
     try {
       const response = await fetch(`${API_URL}${endpoints[activeTab]}`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -118,8 +100,6 @@ function Products() {
     } catch (err) {
       console.error('Erro ao buscar dados:', err)
       alert('Erro ao buscar dados: ' + err.message)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -166,53 +146,16 @@ function Products() {
     setShowModal(true)
   }
 
-  const openEditModal = async (item) => {
+  const openEditModal = (item) => {
     setModalType('edit')
     if (activeTab === 'products') {
-      const token = localStorage.getItem('token')
-      setLoading(true)
-      try {
-        const [pricesRes, productRes] = await Promise.all([
-          fetch(`${API_URL}/products/${item.id}/variation-prices`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          }),
-          fetch(`${API_URL}/products/${item.id}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          })
-        ])
-        
-        const pricesData = await pricesRes.json()
-        const productData = await productRes.json()
-        
-        // Buscar sabor do produto
-        const flavorResponse = await fetch(`${API_URL}/products/${item.id}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-        const flavorData = await flavorResponse.json()
-        
-        setProductFormData({
-          name: item.name,
-          description: item.description || '',
-          category_id: item.category_id,
-          measure_id: item.measure_id,
-          is_active: item.is_active ?? true,
-          variation_prices: pricesData.data || [],
-          flavor_ids: [] // Será preenchido pelo nome
-        })
-      } catch (err) {
-        console.error('Erro ao buscar dados do produto:', err)
-        setProductFormData({
-          name: item.name,
-          description: item.description || '',
-          category_id: item.category_id,
-          measure_id: item.measure_id,
-          is_active: item.is_active ?? true,
-          variation_prices: [],
-          flavor_ids: []
-        })
-      } finally {
-        setLoading(false)
-      }
+      setProductFormData({
+        name: item.name,
+        description: item.description || '',
+        category_id: item.category_id,
+        measure_id: item.measure_id,
+        is_active: item.is_active ?? true
+      })
     } else {
       setFormData({ name: item.name, is_active: item.is_active ?? true })
     }
@@ -226,53 +169,12 @@ function Products() {
     setShowModal(true)
   }
 
-  const openAdditionalsModal = async (product) => {
-    const token = localStorage.getItem('token')
-    setLoading(true)
-    try {
-      // Buscar adicionais cadastrados para este produto
-      const response = await fetch(`${API_URL}/products/${product.id}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      const data = await response.json()
-      
-      // Buscar preços dos adicionais por categoria
-      const pricesResponse = await fetch(`${API_URL}/category-additionals`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      const pricesData = await pricesResponse.json()
-      
-      // Filtrar preços desta categoria
-      const categoryPrices = pricesData.data.filter(
-        p => p.category_id === product.category_id
-      )
-      
-      // Mapear para o formato esperado
-      const formattedPrices = categoryPrices.map(p => ({
-        category_id: p.category_id,
-        variation_id: p.variation_id,
-        additional_id: p.additional_id,
-        price: parseFloat(p.price)
-      }))
-      
-      // Extrair IDs únicos dos adicionais
-      const additionalIds = [...new Set(categoryPrices.map(p => p.additional_id))]
-      
-      setSelectedProduct({
-        ...product,
-        additional_ids: additionalIds,
-        category_variation_additional_prices: formattedPrices
-      })
-    } catch (err) {
-      console.error('Erro ao buscar adicionais:', err)
-      setSelectedProduct({
-        ...product,
-        additional_ids: [],
-        category_variation_additional_prices: []
-      })
-    } finally {
-      setLoading(false)
-    }
+  const openAdditionalsModal = (product) => {
+    setSelectedProduct({
+      ...product,
+      additional_ids: [],
+      category_variation_additional_prices: []
+    })
     setShowAdditionalsModal(true)
   }
 
@@ -282,29 +184,6 @@ function Products() {
     const endpoint = getEndpoint()
     const dataToSend = activeTab === 'products' ? productFormData : formData
     
-    // Validações para produtos
-    if (activeTab === 'products') {
-      if (!categories.length || !measures.length || !variations.length || !flavors.length) {
-        alert('Erro: Cadastre primeiro as categorias, medidas, variações e sabores!')
-        return
-      }
-      if (!productFormData.category_id || !productFormData.measure_id) {
-        alert('Erro: Selecione categoria e medida!')
-        return
-      }
-      if (!productFormData.flavor_ids.length) {
-        alert('Erro: Selecione um sabor!')
-        return
-      }
-      if (!productFormData.variation_prices.length || productFormData.variation_prices.length !== variations.length) {
-        alert('Erro: Defina os preços para todas as variações!')
-        return
-      }
-      
-      console.log('Dados do produto a enviar:', dataToSend)
-    }
-    
-    setLoading(true)
     try {
       if (modalType === 'create') {
         const response = await fetch(`${API_URL}${endpoint}`, {
@@ -345,8 +224,6 @@ function Products() {
     } catch (err) {
       console.error('Erro ao salvar:', err)
       alert('Erro ao salvar: ' + err.message)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -364,121 +241,6 @@ function Products() {
       fetchData()
     } catch (err) {
       console.error('Erro ao deletar:', err)
-    }
-  }
-
-  const getFilteredProducts = () => {
-    return products.filter(product => {
-      const matchCategory = !filterCategory || product.category_id === parseInt(filterCategory)
-      const matchStatus = !filterStatus || (filterStatus === 'active' ? product.is_active : !product.is_active)
-      return matchCategory && matchStatus
-    })
-  }
-
-  const openEditAdditionalModal = (item) => {
-    setEditingAdditional(item)
-    setShowEditAdditionalModal(true)
-  }
-
-  const saveEditAdditional = async () => {
-    const token = localStorage.getItem('token')
-    setLoading(true)
-    try {
-      const response = await fetch(`${API_URL}/category-additionals/${editingAdditional.category_id}/${editingAdditional.variation_id}/${editingAdditional.additional_id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ price: editingAdditional.price })
-      })
-      
-      if (response.ok) {
-        alert('Preço atualizado com sucesso!')
-        setShowEditAdditionalModal(false)
-        fetchCategoryAdditionals()
-      } else {
-        alert('Erro ao atualizar preço')
-      }
-    } catch (err) {
-      console.error('Erro:', err)
-      alert('Erro ao atualizar')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const deleteAdditionalPrice = async (item) => {
-    const token = localStorage.getItem('token')
-    setLoading(true)
-    try {
-      const response = await fetch(`${API_URL}/category-additionals/${item.category_id}/${item.variation_id}/${item.additional_id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      
-      if (response.ok) {
-        alert('Preço excluído com sucesso!')
-        fetchCategoryAdditionals()
-      } else {
-        alert('Erro ao excluir preço')
-      }
-    } catch (err) {
-      console.error('Erro:', err)
-      alert('Erro ao excluir')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const activateAdditionalPrice = async (item) => {
-    const token = localStorage.getItem('token')
-    setLoading(true)
-    try {
-      const response = await fetch(`${API_URL}/category-additionals/${item.category_id}/${item.variation_id}/${item.additional_id}/activate`, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      
-      if (response.ok) {
-        alert('Preço ativado com sucesso!')
-        fetchCategoryAdditionals()
-      } else {
-        alert('Erro ao ativar preço')
-      }
-    } catch (err) {
-      console.error('Erro:', err)
-      alert('Erro ao ativar')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const toggleActiveStatus = async (item) => {
-    const token = localStorage.getItem('token')
-    const endpoint = getEndpoint()
-    setLoading(true)
-    try {
-      const response = await fetch(`${API_URL}${endpoint}/${item.id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ ...item, is_active: !item.is_active })
-      })
-      
-      if (response.ok) {
-        alert(`${getTabTitle()} ${!item.is_active ? 'ativado' : 'desativado'} com sucesso!`)
-        fetchData()
-      } else {
-        alert('Erro ao alterar status')
-      }
-    } catch (err) {
-      console.error('Erro:', err)
-      alert('Erro ao alterar status')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -563,52 +325,27 @@ function Products() {
     }))
   }
 
-  const fetchCategoryAdditionals = async () => {
-    const token = localStorage.getItem('token')
-    try {
-      console.log('Buscando adicionais por categoria...')
-      const response = await fetch(`${API_URL}/category-additionals`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      const data = await response.json()
-      console.log('Resposta category-additionals:', data)
-      if (response.ok) {
-        setCategoryAdditionals(data.data || [])
-      } else {
-        console.error('Erro na resposta:', data)
-      }
-    } catch (err) {
-      console.error('Erro ao buscar adicionais por categoria:', err)
-    }
-  }
-
   const saveAdditionals = async () => {
     const token = localStorage.getItem('token')
     try {
-      const payload = {
-        name: selectedProduct.name,
-        description: selectedProduct.description,
-        category_id: selectedProduct.category_id,
-        measure_id: selectedProduct.measure_id,
-        is_active: selectedProduct.is_active,
-        additional_ids: selectedProduct.additional_ids || [],
-        category_variation_additional_prices: selectedProduct.category_variation_additional_prices || []
-      }
-      
-      console.log('Payload enviado:', JSON.stringify(payload, null, 2))
-      
       const response = await fetch(`${API_URL}/products/${selectedProduct.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          name: selectedProduct.name,
+          description: selectedProduct.description,
+          category_id: selectedProduct.category_id,
+          measure_id: selectedProduct.measure_id,
+          is_active: selectedProduct.is_active,
+          additional_ids: selectedProduct.additional_ids || [],
+          category_variation_additional_prices: selectedProduct.category_variation_additional_prices || []
+        })
       })
       
       const data = await response.json()
-      console.log('Resposta da API:', data)
-      
       if (!response.ok) {
         alert('Erro: ' + (data.message || 'Erro ao salvar'))
         return
@@ -617,7 +354,6 @@ function Products() {
       alert('Adicionais salvos com sucesso!')
       setShowAdditionalsModal(false)
       fetchData()
-      fetchCategoryAdditionals()
     } catch (err) {
       console.error('Erro:', err)
       alert('Erro ao salvar adicionais')
@@ -671,51 +407,21 @@ function Products() {
 
         <div className="d-flex justify-content-between align-items-center mb-3">
           <h4>{getTabTitle()}</h4>
-          <button className="btn btn-primary" onClick={openCreateModal} disabled={loading}>
-            + Cadastrar {getTabTitle()}
-          </button>
-        </div>
-
-        {activeTab === 'products' && (
-          <div className="row mb-3">
-            <div className="col-md-4">
-              <label className="form-label">Filtrar por Categoria</label>
-              <select 
-                className="form-select" 
-                value={filterCategory} 
-                onChange={(e) => setFilterCategory(e.target.value)}
-              >
-                <option value="">Todas</option>
-                {categories.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-md-4">
-              <label className="form-label">Filtrar por Status</label>
-              <select 
-                className="form-select" 
-                value={filterStatus} 
-                onChange={(e) => setFilterStatus(e.target.value)}
-              >
-                <option value="">Todos</option>
-                <option value="active">Ativo</option>
-                <option value="inactive">Inativo</option>
-              </select>
-            </div>
+          <div>
+            {activeTab === 'products' && (
+              <button className="btn btn-info me-2" onClick={() => setShowAdditionalsModal(true)}>
+                Gerir Adicionais
+              </button>
+            )}
+            <button className="btn btn-primary" onClick={openCreateModal}>
+              + Cadastrar {getTabTitle()}
+            </button>
           </div>
-        )}
+        </div>
 
         <div className="card">
           <div className="card-body">
-            {loading ? (
-              <div className="text-center py-5">
-                <div className="spinner-border text-primary" role="status">
-                  <span className="visually-hidden">Carregando...</span>
-                </div>
-                <p className="mt-2">Carregando dados...</p>
-              </div>
-            ) : activeTab === 'products' ? (
+            {activeTab === 'products' ? (
               <table className="table table-hover">
                 <thead>
                   <tr>
@@ -724,35 +430,18 @@ function Products() {
                     <th>Descrição</th>
                     <th>Categoria</th>
                     <th>Medida</th>
-                    <th>Preços</th>
                     <th>Status</th>
                     <th style={{width: '250px'}}>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {getFilteredProducts().map(item => (
+                  {products.map(item => (
                     <tr key={item.id}>
                       <td>{item.id}</td>
                       <td>{item.name}</td>
                       <td>{item.description}</td>
                       <td>{item.category_name}</td>
                       <td>{item.measure_name}</td>
-                      <td>
-                        <button 
-                          className="btn btn-sm btn-outline-primary" 
-                          onClick={async () => {
-                            const token = localStorage.getItem('token')
-                            const res = await fetch(`${API_URL}/products/${item.id}/variation-prices`, {
-                              headers: { 'Authorization': `Bearer ${token}` }
-                            })
-                            const data = await res.json()
-                            const prices = data.data.map(p => `${p.variation_name}: R$ ${parseFloat(p.price).toFixed(2)}`).join('\n')
-                            alert(prices || 'Sem preços cadastrados')
-                          }}
-                        >
-                          Ver Preços
-                        </button>
-                      </td>
                       <td>
                         <span className={`badge ${item.is_active ? 'bg-success' : 'bg-secondary'}`}>
                           {item.is_active ? 'Ativo' : 'Inativo'}
@@ -765,15 +454,6 @@ function Products() {
                         <button className="btn btn-sm btn-warning me-1" onClick={() => openEditModal(item)}>
                           Editar
                         </button>
-                        {!item.is_active ? (
-                          <button className="btn btn-sm btn-success me-1" onClick={() => toggleActiveStatus(item)}>
-                            Ativar
-                          </button>
-                        ) : (
-                          <button className="btn btn-sm btn-secondary me-1" onClick={() => toggleActiveStatus(item)}>
-                            Desativar
-                          </button>
-                        )}
                         <button className="btn btn-sm btn-danger" onClick={() => openDeleteModal(item)}>
                           Excluir
                         </button>
@@ -805,20 +485,9 @@ function Products() {
                         </td>
                       )}
                       <td>
-                        <button className="btn btn-sm btn-warning me-1" onClick={() => openEditModal(item)}>
+                        <button className="btn btn-sm btn-warning me-2" onClick={() => openEditModal(item)}>
                           Editar
                         </button>
-                        {activeTab !== 'measures' && (
-                          !item.is_active ? (
-                            <button className="btn btn-sm btn-success me-1" onClick={() => toggleActiveStatus(item)}>
-                              Ativar
-                            </button>
-                          ) : (
-                            <button className="btn btn-sm btn-secondary me-1" onClick={() => toggleActiveStatus(item)}>
-                              Desativar
-                            </button>
-                          )
-                        )}
                         <button className="btn btn-sm btn-danger" onClick={() => openDeleteModal(item)}>
                           Excluir
                         </button>
@@ -828,75 +497,11 @@ function Products() {
                 </tbody>
               </table>
             )}
-            {getCurrentData().length === 0 && !loading && (
+            {getCurrentData().length === 0 && (
               <p className="text-center text-muted">Nenhum registro encontrado</p>
             )}
           </div>
         </div>
-
-        {activeTab === 'products' && (
-          <>
-            <div className="d-flex justify-content-between align-items-center mb-3 mt-4">
-              <h4>Adicionais por Categoria</h4>
-            </div>
-
-            <div className="card mt-4">
-              <div className="card-body">
-                <table className="table table-hover">
-                  <thead>
-                    <tr>
-                      <th>Adicional</th>
-                      <th>Categoria</th>
-                      <th>Variação</th>
-                      <th>Preço</th>
-                      <th>Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {categoryAdditionals.map((item, index) => (
-                      <tr key={index}>
-                        <td>{item.additional_name}</td>
-                        <td>{item.category_name}</td>
-                        <td>{item.variation_name}</td>
-                        <td>R$ {parseFloat(item.price).toFixed(2)}</td>
-                        <td>
-                          <button 
-                            className="btn btn-sm btn-warning me-1" 
-                            onClick={() => openEditAdditionalModal(item)}
-                          >
-                            Editar
-                          </button>
-                          {item.deleted_at ? (
-                            <button 
-                              className="btn btn-sm btn-success" 
-                              onClick={() => activateAdditionalPrice(item)}
-                            >
-                              Ativar
-                            </button>
-                          ) : (
-                            <button 
-                              className="btn btn-sm btn-danger" 
-                              onClick={() => {
-                                if (window.confirm(`Excluir preço do adicional ${item.additional_name}?`)) {
-                                  deleteAdditionalPrice(item)
-                                }
-                              }}
-                            >
-                              Excluir
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {categoryAdditionals.length === 0 && (
-                  <p className="text-center text-muted">Nenhum adicional cadastrado</p>
-                )}
-              </div>
-            </div>
-          </>
-        )}
       </div>
 
       {/* Modal Principal */}
@@ -1134,53 +739,6 @@ function Products() {
                 </button>
                 <button className="btn btn-primary" onClick={saveAdditionals}>
                   Salvar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Edição de Adicional */}
-      {showEditAdditionalModal && editingAdditional && (
-        <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
-          <div className="modal-dialog">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Editar Preço do Adicional</h5>
-                <button type="button" className="btn-close" onClick={() => setShowEditAdditionalModal(false)}></button>
-              </div>
-              <div className="modal-body">
-                <div className="mb-3">
-                  <label className="form-label">Adicional</label>
-                  <input type="text" className="form-control" value={editingAdditional.additional_name} disabled />
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Categoria</label>
-                  <input type="text" className="form-control" value={editingAdditional.category_name} disabled />
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Variação</label>
-                  <input type="text" className="form-control" value={editingAdditional.variation_name} disabled />
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Preço *</label>
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    className="form-control" 
-                    value={editingAdditional.price}
-                    onChange={(e) => setEditingAdditional({...editingAdditional, price: e.target.value})}
-                    required
-                  />
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => setShowEditAdditionalModal(false)}>
-                  Cancelar
-                </button>
-                <button className="btn btn-primary" onClick={saveEditAdditional} disabled={loading}>
-                  {loading ? 'Salvando...' : 'Salvar'}
                 </button>
               </div>
             </div>
