@@ -1,0 +1,753 @@
+import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { API_URL } from './config'
+
+function Products() {
+  const navigate = useNavigate()
+  const { restaurantSlug } = useParams()
+  const [activeTab, setActiveTab] = useState('products')
+  
+  const [measures, setMeasures] = useState([])
+  const [additionals, setAdditionals] = useState([])
+  const [variations, setVariations] = useState([])
+  const [flavors, setFlavors] = useState([])
+  const [categories, setCategories] = useState([])
+  const [products, setProducts] = useState([])
+  
+  const [showModal, setShowModal] = useState(false)
+  const [showAdditionalsModal, setShowAdditionalsModal] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState(null)
+  const [modalType, setModalType] = useState('create')
+  const [currentItem, setCurrentItem] = useState(null)
+  const [formData, setFormData] = useState({ name: '', is_active: true })
+  const [productFormData, setProductFormData] = useState({
+    name: '',
+    description: '',
+    category_id: '',
+    measure_id: '',
+    is_active: true,
+    variation_prices: [],
+    flavor_ids: []
+  })
+
+  useEffect(() => {
+    fetchData()
+    if (activeTab === 'products') {
+      fetchAllData()
+    }
+  }, [activeTab])
+
+  const fetchAllData = async () => {
+    const token = localStorage.getItem('token')
+    try {
+      const [measuresRes, additionalsRes, variationsRes, flavorsRes, categoriesRes] = await Promise.all([
+        fetch(`${API_URL}/product-measures`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API_URL}/additionals`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API_URL}/variations`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API_URL}/flavors`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API_URL}/categories`, { headers: { 'Authorization': `Bearer ${token}` } })
+      ])
+      
+      const [measuresData, additionalsData, variationsData, flavorsData, categoriesData] = await Promise.all([
+        measuresRes.json(),
+        additionalsRes.json(),
+        variationsRes.json(),
+        flavorsRes.json(),
+        categoriesRes.json()
+      ])
+      
+      setMeasures(measuresData.data || [])
+      setAdditionals(additionalsData.data || [])
+      setVariations(variationsData.data || [])
+      setFlavors(flavorsData.data || [])
+      setCategories(categoriesData.data || [])
+    } catch (err) {
+      console.error('Erro ao buscar dados auxiliares:', err)
+    }
+  }
+
+  const fetchData = async () => {
+    const token = localStorage.getItem('token')
+    const endpoints = {
+      measures: '/product-measures',
+      additionals: '/additionals',
+      variations: '/variations',
+      flavors: '/flavors',
+      categories: '/categories',
+      products: '/products'
+    }
+    
+    try {
+      const response = await fetch(`${API_URL}${endpoints[activeTab]}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        alert('Erro ao carregar dados: ' + (data.message || 'Erro desconhecido'))
+        return
+      }
+      
+      switch(activeTab) {
+        case 'measures': setMeasures(data.data); break
+        case 'additionals': setAdditionals(data.data); break
+        case 'variations': setVariations(data.data); break
+        case 'flavors': setFlavors(data.data); break
+        case 'categories': setCategories(data.data); break
+        case 'products': setProducts(data.data); break
+      }
+    } catch (err) {
+      console.error('Erro ao buscar dados:', err)
+      alert('Erro ao buscar dados: ' + err.message)
+    }
+  }
+
+  const getCurrentData = () => {
+    switch(activeTab) {
+      case 'measures': return measures
+      case 'additionals': return additionals
+      case 'variations': return variations
+      case 'flavors': return flavors
+      case 'categories': return categories
+      case 'products': return products
+      default: return []
+    }
+  }
+
+  const getEndpoint = () => {
+    const endpoints = {
+      measures: '/product-measures',
+      additionals: '/additionals',
+      variations: '/variations',
+      flavors: '/flavors',
+      categories: '/categories',
+      products: '/products'
+    }
+    return endpoints[activeTab]
+  }
+
+  const openCreateModal = () => {
+    setModalType('create')
+    if (activeTab === 'products') {
+      setProductFormData({
+        name: '',
+        description: '',
+        category_id: '',
+        measure_id: '',
+        is_active: true,
+        variation_prices: [],
+        flavor_ids: []
+      })
+    } else {
+      setFormData({ name: '', is_active: true })
+    }
+    setCurrentItem(null)
+    setShowModal(true)
+  }
+
+  const openEditModal = (item) => {
+    setModalType('edit')
+    if (activeTab === 'products') {
+      setProductFormData({
+        name: item.name,
+        description: item.description || '',
+        category_id: item.category_id,
+        measure_id: item.measure_id,
+        is_active: item.is_active ?? true
+      })
+    } else {
+      setFormData({ name: item.name, is_active: item.is_active ?? true })
+    }
+    setCurrentItem(item)
+    setShowModal(true)
+  }
+
+  const openDeleteModal = (item) => {
+    setModalType('delete')
+    setCurrentItem(item)
+    setShowModal(true)
+  }
+
+  const openAdditionalsModal = (product) => {
+    setSelectedProduct({
+      ...product,
+      additional_ids: [],
+      category_variation_additional_prices: []
+    })
+    setShowAdditionalsModal(true)
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    const token = localStorage.getItem('token')
+    const endpoint = getEndpoint()
+    const dataToSend = activeTab === 'products' ? productFormData : formData
+    
+    try {
+      if (modalType === 'create') {
+        const response = await fetch(`${API_URL}${endpoint}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(dataToSend)
+        })
+        
+        const data = await response.json()
+        
+        if (!response.ok) {
+          alert('Erro ao cadastrar: ' + (data.message || 'Erro desconhecido'))
+          return
+        }
+      } else if (modalType === 'edit') {
+        const response = await fetch(`${API_URL}${endpoint}/${currentItem.id}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(dataToSend)
+        })
+        
+        const data = await response.json()
+        
+        if (!response.ok) {
+          alert('Erro ao editar: ' + (data.message || 'Erro desconhecido'))
+          return
+        }
+      }
+      
+      setShowModal(false)
+      fetchData()
+    } catch (err) {
+      console.error('Erro ao salvar:', err)
+      alert('Erro ao salvar: ' + err.message)
+    }
+  }
+
+  const handleDelete = async () => {
+    const token = localStorage.getItem('token')
+    const endpoint = getEndpoint()
+    
+    try {
+      await fetch(`${API_URL}${endpoint}/${currentItem.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      
+      setShowModal(false)
+      fetchData()
+    } catch (err) {
+      console.error('Erro ao deletar:', err)
+    }
+  }
+
+  const getTabTitle = () => {
+    const titles = {
+      measures: 'Medidas',
+      additionals: 'Adicionais',
+      variations: 'Variações',
+      flavors: 'Sabores',
+      categories: 'Categorias',
+      products: 'Produtos'
+    }
+    return titles[activeTab]
+  }
+
+  const handleVariationPriceChange = (variationId, price) => {
+    setProductFormData(prev => {
+      const exists = prev.variation_prices.find(vp => vp.variation_id === variationId)
+      
+      if (exists) {
+        return {
+          ...prev,
+          variation_prices: prev.variation_prices.map(vp =>
+            vp.variation_id === variationId ? { ...vp, price: parseFloat(price) || 0 } : vp
+          )
+        }
+      } else {
+        return {
+          ...prev,
+          variation_prices: [...prev.variation_prices, { variation_id: variationId, price: parseFloat(price) || 0 }]
+        }
+      }
+    })
+  }
+
+  const handleFlavorToggle = (flavorId) => {
+    const selectedFlavor = flavors.find(f => f.id === parseInt(flavorId))
+    setProductFormData(prev => ({
+      ...prev,
+      flavor_ids: flavorId ? [parseInt(flavorId)] : [],
+      name: selectedFlavor ? selectedFlavor.name : ''
+    }))
+  }
+
+  const handleAdditionalToggle = (additionalId) => {
+    setSelectedProduct(prev => {
+      const isSelected = prev.additional_ids?.includes(additionalId) || false
+      
+      if (isSelected) {
+        return {
+          ...prev,
+          additional_ids: prev.additional_ids.filter(id => id !== additionalId),
+          category_variation_additional_prices: prev.category_variation_additional_prices.filter(
+            p => p.additional_id !== additionalId
+          )
+        }
+      } else {
+        const newPrices = variations.map(variation => ({
+          category_id: parseInt(prev.category_id),
+          variation_id: variation.id,
+          additional_id: additionalId,
+          price: 0
+        }))
+        
+        return {
+          ...prev,
+          additional_ids: [...(prev.additional_ids || []), additionalId],
+          category_variation_additional_prices: [...(prev.category_variation_additional_prices || []), ...newPrices]
+        }
+      }
+    })
+  }
+
+  const handleAdditionalPriceChange = (variationId, additionalId, price) => {
+    setSelectedProduct(prev => ({
+      ...prev,
+      category_variation_additional_prices: prev.category_variation_additional_prices.map(p =>
+        p.variation_id === variationId && p.additional_id === additionalId
+          ? { ...p, price: parseFloat(price) || 0 }
+          : p
+      )
+    }))
+  }
+
+  const saveAdditionals = async () => {
+    const token = localStorage.getItem('token')
+    
+    try {
+      const response = await fetch(`${API_URL}/products/${selectedProduct.id}/additionals`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          additional_ids: selectedProduct.additional_ids,
+          category_variation_additional_prices: selectedProduct.category_variation_additional_prices
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        alert('Erro ao salvar adicionais: ' + (data.message || 'Erro desconhecido'))
+        return
+      }
+      
+      setShowAdditionalsModal(false)
+      alert('Adicionais salvos com sucesso!')
+    } catch (err) {
+      console.error('Erro ao salvar adicionais:', err)
+      alert('Erro ao salvar adicionais: ' + err.message)
+    }
+  }
+
+  return (
+    <div className="min-vh-100 bg-light">
+      <nav className="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div className="container">
+          <span className="navbar-brand">Gerenciar Produtos</span>
+          <button className="btn btn-outline-light" onClick={() => navigate(`/${restaurantSlug}/home`)}>
+            Voltar
+          </button>
+        </div>
+      </nav>
+
+      <div className="container mt-4">
+        <ul className="nav nav-tabs mb-4">
+          <li className="nav-item">
+            <button className={`nav-link ${activeTab === 'products' ? 'active' : ''}`} onClick={() => setActiveTab('products')}>
+              Produtos
+            </button>
+          </li>
+          <li className="nav-item">
+            <button className={`nav-link ${activeTab === 'measures' ? 'active' : ''}`} onClick={() => setActiveTab('measures')}>
+              Medidas
+            </button>
+          </li>
+          <li className="nav-item">
+            <button className={`nav-link ${activeTab === 'additionals' ? 'active' : ''}`} onClick={() => setActiveTab('additionals')}>
+              Adicionais
+            </button>
+          </li>
+          <li className="nav-item">
+            <button className={`nav-link ${activeTab === 'variations' ? 'active' : ''}`} onClick={() => setActiveTab('variations')}>
+              Variações
+            </button>
+          </li>
+          <li className="nav-item">
+            <button className={`nav-link ${activeTab === 'flavors' ? 'active' : ''}`} onClick={() => setActiveTab('flavors')}>
+              Sabores
+            </button>
+          </li>
+          <li className="nav-item">
+            <button className={`nav-link ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}>
+              Categorias
+            </button>
+          </li>
+        </ul>
+
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <h4>{getTabTitle()}</h4>
+          <div>
+            {activeTab === 'products' && (
+              <button className="btn btn-info me-2" onClick={() => setShowAdditionalsModal(true)}>
+                Gerir Adicionais
+              </button>
+            )}
+            <button className="btn btn-primary" onClick={openCreateModal}>
+              + Cadastrar {getTabTitle()}
+            </button>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-body">
+            {activeTab === 'products' ? (
+              <table className="table table-hover">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Nome</th>
+                    <th>Descrição</th>
+                    <th>Categoria</th>
+                    <th>Medida</th>
+                    <th>Status</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {products.map(item => (
+                    <tr key={item.id}>
+                      <td>{item.id}</td>
+                      <td>{item.name}</td>
+                      <td>{item.description}</td>
+                      <td>{item.category_name}</td>
+                      <td>{item.measure_name}</td>
+                      <td>
+                        <span className={`badge ${item.is_active ? 'bg-success' : 'bg-secondary'}`}>
+                          {item.is_active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td>
+                        <button className="btn btn-sm btn-warning me-2" onClick={() => openEditModal(item)}>
+                          Editar
+                        </button>
+                        <button className="btn btn-sm btn-danger" onClick={() => openDeleteModal(item)}>
+                          Excluir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <table className="table table-hover">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Nome</th>
+                    {activeTab !== 'measures' && <th>Status</th>}
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {getCurrentData().map(item => (
+                    <tr key={item.id}>
+                      <td>{item.id}</td>
+                      <td>{item.name}</td>
+                      {activeTab !== 'measures' && (
+                        <td>
+                          <span className={`badge ${item.is_active ? 'bg-success' : 'bg-secondary'}`}>
+                            {item.is_active ? 'Ativo' : 'Inativo'}
+                          </span>
+                        </td>
+                      )}
+                      <td>
+                        <button className="btn btn-sm btn-warning me-2" onClick={() => openEditModal(item)}>
+                          Editar
+                        </button>
+                        <button className="btn btn-sm btn-danger" onClick={() => openDeleteModal(item)}>
+                          Excluir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {getCurrentData().length === 0 && (
+              <p className="text-center text-muted">Nenhum registro encontrado</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Modal Principal */}
+      {showModal && (
+        <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
+          <div className={`modal-dialog ${activeTab === 'products' ? 'modal-lg' : ''}`}>
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  {modalType === 'create' && `Cadastrar ${getTabTitle()}`}
+                  {modalType === 'edit' && `Editar ${getTabTitle()}`}
+                  {modalType === 'delete' && `Excluir ${getTabTitle()}`}
+                </h5>
+                <button type="button" className="btn-close" onClick={() => setShowModal(false)}></button>
+              </div>
+              
+              {modalType === 'delete' ? (
+                <>
+                  <div className="modal-body">
+                    <p>Tem certeza que deseja excluir <strong>{currentItem?.name}</strong>?</p>
+                  </div>
+                  <div className="modal-footer">
+                    <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
+                    <button className="btn btn-danger" onClick={handleDelete}>Excluir</button>
+                  </div>
+                </>
+              ) : (
+                <form onSubmit={handleSubmit}>
+                  <div className="modal-body">
+                    {activeTab === 'products' ? (
+                      <>
+                        <div className="mb-3">
+                          <label className="form-label">Descrição</label>
+                          <textarea
+                            className="form-control"
+                            rows="2"
+                            value={productFormData.description}
+                            onChange={(e) => setProductFormData({...productFormData, description: e.target.value})}
+                          />
+                        </div>
+                        
+                        <div className="row">
+                          <div className="col-md-6 mb-3">
+                            <label className="form-label">Categoria *</label>
+                            <select
+                              className="form-select"
+                              value={productFormData.category_id}
+                              onChange={(e) => setProductFormData({...productFormData, category_id: parseInt(e.target.value)})}
+                              required
+                            >
+                              <option value="">Selecione...</option>
+                              {categories.map(cat => (
+                                <option key={cat.id} value={cat.id}>{cat.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                          <div className="col-md-6 mb-3">
+                            <label className="form-label">Medida *</label>
+                            <select
+                              className="form-select"
+                              value={productFormData.measure_id}
+                              onChange={(e) => setProductFormData({...productFormData, measure_id: parseInt(e.target.value)})}
+                              required
+                            >
+                              <option value="">Selecione...</option>
+                              {measures.map(measure => (
+                                <option key={measure.id} value={measure.id}>{measure.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="mb-3">
+                          <label className="form-label fw-bold">Sabor *</label>
+                          <select
+                            className="form-select"
+                            value={productFormData.flavor_ids[0] || ''}
+                            onChange={(e) => handleFlavorToggle(e.target.value)}
+                            required
+                          >
+                            <option value="">Selecione um sabor...</option>
+                            {flavors.map(flavor => (
+                              <option key={flavor.id} value={flavor.id}>{flavor.name}</option>
+                            ))}
+                          </select>
+                          <small className="text-muted">O nome do produto será o sabor selecionado</small>
+                        </div>
+
+                        {productFormData.name && (
+                          <div className="alert alert-info mb-3">
+                            <strong>Nome do produto:</strong> {productFormData.name}
+                          </div>
+                        )}
+
+                        <div className="mb-3">
+                          <label className="form-label fw-bold">Preços por Variação *</label>
+                          <div className="border rounded p-3">
+                            {variations.map(variation => (
+                              <div key={variation.id} className="row mb-2">
+                                <div className="col-6">
+                                  <label className="form-label mb-0">{variation.name}</label>
+                                </div>
+                                <div className="col-6">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    className="form-control form-control-sm"
+                                    placeholder="0.00"
+                                    value={productFormData.variation_prices.find(vp => vp.variation_id === variation.id)?.price || ''}
+                                    onChange={(e) => handleVariationPriceChange(variation.id, e.target.value)}
+                                    required
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="mb-3">
+                          <div className="form-check">
+                            <input
+                              type="checkbox"
+                              className="form-check-input"
+                              checked={productFormData.is_active}
+                              onChange={(e) => setProductFormData({...productFormData, is_active: e.target.checked})}
+                            />
+                            <label className="form-check-label">Ativo</label>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="mb-3">
+                          <label className="form-label">Nome</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={formData.name}
+                            onChange={(e) => setFormData({...formData, name: e.target.value})}
+                            required
+                          />
+                        </div>
+                        {activeTab !== 'measures' && (
+                          <div className="mb-3">
+                            <div className="form-check">
+                              <input
+                                type="checkbox"
+                                className="form-check-input"
+                                checked={formData.is_active}
+                                onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
+                              />
+                              <label className="form-check-label">Ativo</label>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <div className="modal-footer">
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
+                      Cancelar
+                    </button>
+                    <button type="submit" className="btn btn-primary">
+                      {modalType === 'create' ? 'Cadastrar' : 'Salvar'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Adicionais */}
+      {showAdditionalsModal && selectedProduct && (
+        <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
+          <div className="modal-dialog modal-lg">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Gerir Adicionais - {selectedProduct.name}</h5>
+                <button type="button" className="btn-close" onClick={() => setShowAdditionalsModal(false)}></button>
+              </div>
+              
+              <div className="modal-body">
+                <div style={{maxHeight: '400px', overflowY: 'auto'}}>
+                  {additionals.length === 0 ? (
+                    <p className="text-muted">Nenhum adicional cadastrado</p>
+                  ) : (
+                    additionals.map(additional => {
+                      const isSelected = selectedProduct.additional_ids?.includes(additional.id) || false
+                      return (
+                        <div key={additional.id} className="mb-3 pb-3 border-bottom">
+                          <div className="form-check mb-2">
+                            <input
+                              type="checkbox"
+                              className="form-check-input"
+                              id={`add-${additional.id}`}
+                              checked={isSelected}
+                              onChange={() => handleAdditionalToggle(additional.id)}
+                            />
+                            <label className="form-check-label fw-bold" htmlFor={`add-${additional.id}`}>
+                              {additional.name}
+                            </label>
+                          </div>
+                          
+                          {isSelected && (
+                            <div className="ms-4">
+                              <small className="text-muted d-block mb-2">Preço por variação:</small>
+                              {variations.map(variation => (
+                                <div key={variation.id} className="row mb-1">
+                                  <div className="col-5">
+                                    <small>{variation.name}:</small>
+                                  </div>
+                                  <div className="col-7">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      className="form-control form-control-sm"
+                                      placeholder="0.00"
+                                      value={
+                                        selectedProduct.category_variation_additional_prices?.find(
+                                          p => p.variation_id === variation.id && p.additional_id === additional.id
+                                        )?.price || ''
+                                      }
+                                      onChange={(e) => handleAdditionalPriceChange(variation.id, additional.id, e.target.value)}
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+              
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={() => setShowAdditionalsModal(false)}>
+                  Cancelar
+                </button>
+                <button className="btn btn-primary" onClick={saveAdditionals}>
+                  Salvar Adicionais
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default Products
