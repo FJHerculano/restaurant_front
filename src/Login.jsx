@@ -46,6 +46,7 @@ function Login() {
       
       localStorage.setItem('token', data.data.token)
       localStorage.setItem('restaurantSlug', restaurantSlug)
+      localStorage.setItem('restaurantId', data.data.user.restaurant_id)
       navigate(`/${restaurantSlug}/home`)
     } catch (err) {
       setError('Erro ao conectar com o servidor')

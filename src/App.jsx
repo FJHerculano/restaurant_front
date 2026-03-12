@@ -4,6 +4,7 @@ import Register from './Register'
 import Home from './Home'
 import Dashboard from './Dashboard'
 import Products from './Products'
+import Users from './Users'
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('token')
@@ -19,6 +20,7 @@ function App() {
         <Route path="/:restaurantSlug/home" element={<PrivateRoute><Home /></PrivateRoute>} />
         <Route path="/:restaurantSlug/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
         <Route path="/:restaurantSlug/products" element={<PrivateRoute><Products /></PrivateRoute>} />
+        <Route path="/:restaurantSlug/users" element={<PrivateRoute><Users /></PrivateRoute>} />
         <Route path="/" element={<Navigate to="/mao-de-vaca/login" />} />
       </Routes>
     </BrowserRouter>

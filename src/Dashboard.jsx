@@ -35,7 +35,7 @@ function Dashboard() {
               </button>
             </div>
             <div className="col-md-6">
-              <button className="btn btn-primary btn-lg w-100 p-4">
+              <button className="btn btn-primary btn-lg w-100 p-4" onClick={() => navigate(`/${restaurantSlug}/users`)}>
                 Gerir Usuários
               </button>
             </div>
@@ -46,7 +46,7 @@ function Dashboard() {
             </div>
             <div className="col-md-6">
               <button className="btn btn-primary btn-lg w-100 p-4">
-                Gerir Clientes
+                Fidelidade
               </button>
             </div>
           </div>

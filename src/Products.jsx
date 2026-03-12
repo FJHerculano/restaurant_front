@@ -172,23 +172,14 @@ function Products() {
       const token = localStorage.getItem('token')
       setLoading(true)
       try {
-        const [pricesRes, productRes] = await Promise.all([
-          fetch(`${API_URL}/products/${item.id}/variation-prices`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          }),
-          fetch(`${API_URL}/products/${item.id}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          })
-        ])
-        
-        const pricesData = await pricesRes.json()
-        const productData = await productRes.json()
-        
-        // Buscar sabor do produto
-        const flavorResponse = await fetch(`${API_URL}/products/${item.id}`, {
+        const pricesRes = await fetch(`${API_URL}/products/${item.id}/variation-prices`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
-        const flavorData = await flavorResponse.json()
+        
+        const pricesData = await pricesRes.json()
+        
+        // Encontrar o sabor pelo nome do produto
+        const matchingFlavor = flavors.find(f => f.name === item.name)
         
         setProductFormData({
           name: item.name,
@@ -196,11 +187,15 @@ function Products() {
           category_id: item.category_id,
           measure_id: item.measure_id,
           is_active: item.is_active ?? true,
-          variation_prices: pricesData.data || [],
-          flavor_ids: [] // Será preenchido pelo nome
+          variation_prices: pricesData.data.map(vp => ({
+            variation_id: vp.variation_id,
+            price: parseFloat(vp.price)
+          })) || [],
+          flavor_ids: matchingFlavor ? [matchingFlavor.id] : []
         })
       } catch (err) {
         console.error('Erro ao buscar dados do produto:', err)
+        const matchingFlavor = flavors.find(f => f.name === item.name)
         setProductFormData({
           name: item.name,
           description: item.description || '',
@@ -208,7 +203,7 @@ function Products() {
           measure_id: item.measure_id,
           is_active: item.is_active ?? true,
           variation_prices: [],
-          flavor_ids: []
+          flavor_ids: matchingFlavor ? [matchingFlavor.id] : []
         })
       } finally {
         setLoading(false)
@@ -280,7 +275,7 @@ function Products() {
     e.preventDefault()
     const token = localStorage.getItem('token')
     const endpoint = getEndpoint()
-    const dataToSend = activeTab === 'products' ? productFormData : formData
+    let dataToSend = activeTab === 'products' ? productFormData : formData
     
     // Validações para produtos
     if (activeTab === 'products') {
@@ -299,6 +294,20 @@ function Products() {
       if (!productFormData.variation_prices.length || productFormData.variation_prices.length !== variations.length) {
         alert('Erro: Defina os preços para todas as variações!')
         return
+      }
+      
+      // Garantir que os preços estão no formato correto
+      dataToSend = {
+        name: productFormData.name,
+        description: productFormData.description || '',
+        category_id: parseInt(productFormData.category_id),
+        measure_id: parseInt(productFormData.measure_id),
+        is_active: productFormData.is_active,
+        flavor_ids: productFormData.flavor_ids,
+        variation_prices: productFormData.variation_prices.map(vp => ({
+          variation_id: parseInt(vp.variation_id),
+          price: parseFloat(vp.price) || 0
+        }))
       }
       
       console.log('Dados do produto a enviar:', dataToSend)
@@ -323,6 +332,8 @@ function Products() {
           return
         }
       } else if (modalType === 'edit') {
+        console.log('Editando produto - Payload:', JSON.stringify(dataToSend, null, 2))
+        
         const response = await fetch(`${API_URL}${endpoint}/${currentItem.id}`, {
           method: 'PUT',
           headers: {
@@ -333,11 +344,14 @@ function Products() {
         })
         
         const data = await response.json()
+        console.log('Resposta da API:', data)
         
         if (!response.ok) {
           alert('Erro ao editar: ' + (data.message || 'Erro desconhecido'))
           return
         }
+        
+        alert('Produto editado com sucesso!')
       }
       
       setShowModal(false)
@@ -353,17 +367,29 @@ function Products() {
   const handleDelete = async () => {
     const token = localStorage.getItem('token')
     const endpoint = getEndpoint()
+    setLoading(true)
     
     try {
-      await fetch(`${API_URL}${endpoint}/${currentItem.id}`, {
+      const response = await fetch(`${API_URL}${endpoint}/${currentItem.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       })
       
+      const data = await response.json()
+      
+      if (!response.ok) {
+        alert('Erro ao excluir: ' + (data.message || 'Erro desconhecido'))
+        return
+      }
+      
+      alert('Excluído com sucesso!')
       setShowModal(false)
       fetchData()
     } catch (err) {
       console.error('Erro ao deletar:', err)
+      alert('Erro ao excluir: ' + err.message)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -376,56 +402,94 @@ function Products() {
   }
 
   const openEditAdditionalModal = (item) => {
+    console.log('Abrindo modal de edição com item:', item)
     setEditingAdditional(item)
     setShowEditAdditionalModal(true)
   }
 
   const saveEditAdditional = async () => {
+    if (!editingAdditional.category_id || !editingAdditional.variation_id || !editingAdditional.additional_id) {
+      alert('Erro: Dados incompletos para editar o adicional')
+      return
+    }
+
     const token = localStorage.getItem('token')
     setLoading(true)
     try {
-      const response = await fetch(`${API_URL}/category-additionals/${editingAdditional.category_id}/${editingAdditional.variation_id}/${editingAdditional.additional_id}`, {
+      const payload = {
+        category_id: parseInt(editingAdditional.category_id),
+        variation_id: parseInt(editingAdditional.variation_id),
+        additional_id: parseInt(editingAdditional.additional_id),
+        price: parseFloat(editingAdditional.price)
+      }
+      
+      console.log('Editando adicional - Payload:', payload)
+      
+      const response = await fetch(`${API_URL}/category-additionals`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ price: editingAdditional.price })
+        body: JSON.stringify(payload)
       })
+      
+      const data = await response.json()
+      console.log('Resposta da API:', data)
       
       if (response.ok) {
         alert('Preço atualizado com sucesso!')
         setShowEditAdditionalModal(false)
         fetchCategoryAdditionals()
       } else {
-        alert('Erro ao atualizar preço')
+        alert('Erro ao atualizar preço: ' + (data.message || 'Erro desconhecido'))
       }
     } catch (err) {
       console.error('Erro:', err)
-      alert('Erro ao atualizar')
+      alert('Erro ao atualizar: ' + err.message)
     } finally {
       setLoading(false)
     }
   }
 
   const deleteAdditionalPrice = async (item) => {
+    if (!item.category_id || !item.variation_id || !item.additional_id) {
+      alert('Erro: Dados incompletos para excluir o adicional')
+      return
+    }
+
     const token = localStorage.getItem('token')
     setLoading(true)
     try {
-      const response = await fetch(`${API_URL}/category-additionals/${item.category_id}/${item.variation_id}/${item.additional_id}`, {
+      const payload = {
+        category_id: parseInt(item.category_id),
+        variation_id: parseInt(item.variation_id),
+        additional_id: parseInt(item.additional_id)
+      }
+      
+      console.log('Excluindo adicional - Payload:', payload)
+      
+      const response = await fetch(`${API_URL}/category-additionals`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
       })
+      
+      const data = await response.json()
+      console.log('Resposta da API:', data)
       
       if (response.ok) {
         alert('Preço excluído com sucesso!')
         fetchCategoryAdditionals()
       } else {
-        alert('Erro ao excluir preço')
+        alert('Erro ao excluir preço: ' + (data.message || 'Erro desconhecido'))
       }
     } catch (err) {
       console.error('Erro:', err)
-      alert('Erro ao excluir')
+      alert('Erro ao excluir: ' + err.message)
     } finally {
       setLoading(false)
     }
@@ -435,16 +499,25 @@ function Products() {
     const token = localStorage.getItem('token')
     setLoading(true)
     try {
-      const response = await fetch(`${API_URL}/category-additionals/${item.category_id}/${item.variation_id}/${item.additional_id}/activate`, {
+      const response = await fetch(`${API_URL}/category-additionals/activate`, {
         method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          category_id: item.category_id,
+          variation_id: item.variation_id,
+          additional_id: item.additional_id
+        })
       })
       
       if (response.ok) {
         alert('Preço ativado com sucesso!')
         fetchCategoryAdditionals()
       } else {
-        alert('Erro ao ativar preço')
+        const data = await response.json()
+        alert('Erro ao ativar preço: ' + (data.message || 'Erro desconhecido'))
       }
     } catch (err) {
       console.error('Erro:', err)
@@ -458,6 +531,30 @@ function Products() {
     const token = localStorage.getItem('token')
     const endpoint = getEndpoint()
     setLoading(true)
+    
+    // Preparar dados completos para cada tipo
+    let updateData = {}
+    
+    if (activeTab === 'products') {
+      updateData = {
+        name: item.name,
+        description: item.description || '',
+        category_id: item.category_id,
+        measure_id: item.measure_id,
+        is_active: !item.is_active
+      }
+    } else if (activeTab === 'measures') {
+      updateData = {
+        name: item.name,
+        is_active: !item.is_active
+      }
+    } else if (activeTab === 'categories' || activeTab === 'variations' || activeTab === 'flavors' || activeTab === 'additionals') {
+      updateData = {
+        name: item.name,
+        is_active: !item.is_active
+      }
+    }
+    
     try {
       const response = await fetch(`${API_URL}${endpoint}/${item.id}`, {
         method: 'PUT',
@@ -465,18 +562,19 @@ function Products() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ ...item, is_active: !item.is_active })
+        body: JSON.stringify(updateData)
       })
       
       if (response.ok) {
         alert(`${getTabTitle()} ${!item.is_active ? 'ativado' : 'desativado'} com sucesso!`)
         fetchData()
       } else {
-        alert('Erro ao alterar status')
+        const data = await response.json()
+        alert('Erro ao alterar status: ' + (data.message || 'Erro desconhecido'))
       }
     } catch (err) {
       console.error('Erro:', err)
-      alert('Erro ao alterar status')
+      alert('Erro ao alterar status: ' + err.message)
     } finally {
       setLoading(false)
     }
@@ -553,14 +651,37 @@ function Products() {
   }
 
   const handleAdditionalPriceChange = (variationId, additionalId, price) => {
-    setSelectedProduct(prev => ({
-      ...prev,
-      category_variation_additional_prices: prev.category_variation_additional_prices.map(p =>
-        p.variation_id === variationId && p.additional_id === additionalId
-          ? { ...p, price: parseFloat(price) || 0 }
-          : p
+    setSelectedProduct(prev => {
+      const existingPrice = prev.category_variation_additional_prices?.find(
+        p => p.variation_id === variationId && p.additional_id === additionalId
       )
-    }))
+      
+      if (existingPrice) {
+        // Atualizar preço existente
+        return {
+          ...prev,
+          category_variation_additional_prices: prev.category_variation_additional_prices.map(p =>
+            p.variation_id === variationId && p.additional_id === additionalId
+              ? { ...p, price: parseFloat(price) || 0 }
+              : p
+          )
+        }
+      } else {
+        // Criar novo preço se não existir
+        return {
+          ...prev,
+          category_variation_additional_prices: [
+            ...(prev.category_variation_additional_prices || []),
+            {
+              category_id: parseInt(prev.category_id),
+              variation_id: variationId,
+              additional_id: additionalId,
+              price: parseFloat(price) || 0
+            }
+          ]
+        }
+      }
+    })
   }
 
   const fetchCategoryAdditionals = async () => {
@@ -804,20 +925,25 @@ function Products() {
                           </span>
                         </td>
                       )}
+                      {activeTab === 'measures' && (
+                        <td>
+                          <span className={`badge ${item.is_active ? 'bg-success' : 'bg-secondary'}`}>
+                            {item.is_active ? 'Ativo' : 'Inativo'}
+                          </span>
+                        </td>
+                      )}
                       <td>
                         <button className="btn btn-sm btn-warning me-1" onClick={() => openEditModal(item)}>
                           Editar
                         </button>
-                        {activeTab !== 'measures' && (
-                          !item.is_active ? (
-                            <button className="btn btn-sm btn-success me-1" onClick={() => toggleActiveStatus(item)}>
-                              Ativar
-                            </button>
-                          ) : (
-                            <button className="btn btn-sm btn-secondary me-1" onClick={() => toggleActiveStatus(item)}>
-                              Desativar
-                            </button>
-                          )
+                        {!item.is_active ? (
+                          <button className="btn btn-sm btn-success me-1" onClick={() => toggleActiveStatus(item)}>
+                            Ativar
+                          </button>
+                        ) : (
+                          <button className="btn btn-sm btn-secondary me-1" onClick={() => toggleActiveStatus(item)}>
+                            Desativar
+                          </button>
                         )}
                         <button className="btn btn-sm btn-danger" onClick={() => openDeleteModal(item)}>
                           Excluir
@@ -1053,6 +1179,19 @@ function Products() {
                             </div>
                           </div>
                         )}
+                        {activeTab === 'measures' && (
+                          <div className="mb-3">
+                            <div className="form-check">
+                              <input
+                                type="checkbox"
+                                className="form-check-input"
+                                checked={formData.is_active}
+                                onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
+                              />
+                              <label className="form-check-label">Ativo</label>
+                            </div>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -1153,15 +1292,15 @@ function Products() {
               <div className="modal-body">
                 <div className="mb-3">
                   <label className="form-label">Adicional</label>
-                  <input type="text" className="form-control" value={editingAdditional.additional_name} disabled />
+                  <input type="text" className="form-control" value={editingAdditional.additional_name || ''} disabled />
                 </div>
                 <div className="mb-3">
                   <label className="form-label">Categoria</label>
-                  <input type="text" className="form-control" value={editingAdditional.category_name} disabled />
+                  <input type="text" className="form-control" value={editingAdditional.category_name || ''} disabled />
                 </div>
                 <div className="mb-3">
                   <label className="form-label">Variação</label>
-                  <input type="text" className="form-control" value={editingAdditional.variation_name} disabled />
+                  <input type="text" className="form-control" value={editingAdditional.variation_name || ''} disabled />
                 </div>
                 <div className="mb-3">
                   <label className="form-label">Preço *</label>
@@ -1169,7 +1308,7 @@ function Products() {
                     type="number" 
                     step="0.01" 
                     className="form-control" 
-                    value={editingAdditional.price}
+                    value={editingAdditional.price || ''}
                     onChange={(e) => setEditingAdditional({...editingAdditional, price: e.target.value})}
                     required
                   />
